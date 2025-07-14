@@ -486,7 +486,7 @@ async function run() {
         console.error("❌ Error fetching reviews:", error);
         res.status(500).send({message: "Failed to fetch reviews"});
       }
-    });
+    }); 
  
     app.delete("/reviews/:id", verifyFbToken, async (req, res) => {
       try {
