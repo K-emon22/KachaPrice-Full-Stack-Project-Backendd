@@ -473,7 +473,7 @@ async function run() {
         console.error("❌ Error posting review:", error);
         res.status(500).send({message: "Failed to post review"});
       }
-    });
+    }); 
 
     app.get("/reviews/:productId", async (req, res) => {
       const {productId} = req.params;
@@ -487,7 +487,7 @@ async function run() {
         res.status(500).send({message: "Failed to fetch reviews"});
       }
     });
-
+ 
     app.delete("/reviews/:id", verifyFbToken, async (req, res) => {
       try {
         const {id} = req.params;
