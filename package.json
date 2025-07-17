@@ -11,12 +11,15 @@
   "type": "commonjs",
   "description": "",
   "dependencies": {
+    "@stripe/react-stripe-js": "^3.7.0",
+    "@stripe/stripe-js": "^7.4.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.1",
     "firebase-admin": "^13.4.0",
     "helmet": "^8.1.0",
-    "mongodb": "^6.17.0"
+    "mongodb": "^6.17.0",
+    "stripe": "^18.3.0"
   }
 }
