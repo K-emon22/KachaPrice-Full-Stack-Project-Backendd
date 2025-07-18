@@ -18,13 +18,12 @@ admin.initializeApp({
 
 const port = process.env.PORT || 3000;
 
-// CORS options to allow only your frontend origin with credentials support
 const corsOptions = {
-  origin: "http://localhost:5174", // your frontend URL
+  origin: ["http://localhost:5173", "http://localhost:5174"], // match your frontend port
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true, // allow cookies/auth headers
+  allowedHeaders: ["Content-Type", "Authorization"], // optional if no custom headers
 };
+
 app.use(cors(corsOptions));
 
 app.use(express.json());
@@ -122,37 +121,39 @@ async function run() {
 
     // Get total payment amount
     app.get("/payments/total-amount", verifyFbToken, async (req, res) => {
-  try {
-    const emailFromQuery = req.query.email;
-    const emailFromToken = req.user.email;
+      try {
+        const emailFromQuery = req.query.email;
+        const emailFromToken = req.user.email;
 
-    if (!emailFromQuery) {
-      return res.status(400).json({ message: "Email query parameter required" });
-    }
-    if (emailFromQuery !== emailFromToken) {
-      return res.status(403).json({ message: "Forbidden: Email mismatch" });
-    }
+        if (!emailFromQuery) {
+          return res
+            .status(400)
+            .json({message: "Email query parameter required"});
+        }
+        if (emailFromQuery !== emailFromToken) {
+          return res.status(403).json({message: "Forbidden: Email mismatch"});
+        }
 
-    const totalResult = await Payments.aggregate([
-      { $match: { email: emailFromQuery } },
-      {
-        $group: {
-          _id: null,
-          totalAmount: { $sum: "$amount" },
-        },
-      },
-    ]).toArray();
+        const totalResult = await Payments.aggregate([
+          {$match: {email: emailFromQuery}},
+          {
+            $group: {
+              _id: null,
+              totalAmount: {$sum: "$amount"},
+            },
+          },
+        ]).toArray();
 
-    const totalAmount = totalResult[0]?.totalAmount || 0;
+        const totalAmount = totalResult[0]?.totalAmount || 0;
 
-    res.status(200).json({ totalAmount });
-  } catch (error) {
-    console.error("Failed to calculate total payment amount:", error);
-    res.status(500).send({
-      message: "Failed to calculate total payment amount",
+        res.status(200).json({totalAmount});
+      } catch (error) {
+        console.error("Failed to calculate total payment amount:", error);
+        res.status(500).send({
+          message: "Failed to calculate total payment amount",
+        });
+      }
     });
-  }
-});
 
     // Add User
     app.post("/users", async (req, res) => {
