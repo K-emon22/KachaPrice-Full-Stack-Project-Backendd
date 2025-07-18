@@ -15,7 +15,7 @@ const serviceAccount = require(path.join(
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
- 
+
 const port = process.env.PORT || 3000;
 
 // CORS options to allow only your frontend origin with credentials support
@@ -121,27 +121,38 @@ async function run() {
     });
 
     // Get total payment amount
-    app.get("/payments/total-amount", async (req, res) => {
-      try {
-        const totalResult = await Payments.aggregate([
-          {
-            $group: {
-              _id: null,
-              totalAmount: {$sum: "$amount"},
-            },
-          },
-        ]).toArray();
+    app.get("/payments/total-amount", verifyFbToken, async (req, res) => {
+  try {
+    const emailFromQuery = req.query.email;
+    const emailFromToken = req.user.email;
 
-        const totalAmount = totalResult[0]?.totalAmount || 0;
+    if (!emailFromQuery) {
+      return res.status(400).json({ message: "Email query parameter required" });
+    }
+    if (emailFromQuery !== emailFromToken) {
+      return res.status(403).json({ message: "Forbidden: Email mismatch" });
+    }
 
-        res.status(200).json({totalAmount});
-      } catch (error) {
-        console.error("Failed to calculate total payment amount:", error);
-        res.status(500).send({
-          message: "Failed to calculate total payment amount",
-        });
-      }
+    const totalResult = await Payments.aggregate([
+      { $match: { email: emailFromQuery } },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: "$amount" },
+        },
+      },
+    ]).toArray();
+
+    const totalAmount = totalResult[0]?.totalAmount || 0;
+
+    res.status(200).json({ totalAmount });
+  } catch (error) {
+    console.error("Failed to calculate total payment amount:", error);
+    res.status(500).send({
+      message: "Failed to calculate total payment amount",
     });
+  }
+});
 
     // Add User
     app.post("/users", async (req, res) => {
