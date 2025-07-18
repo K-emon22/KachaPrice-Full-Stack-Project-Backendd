@@ -15,7 +15,7 @@ const serviceAccount = require(path.join(
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
-
+ 
 const port = process.env.PORT || 3000;
 
 // CORS options to allow only your frontend origin with credentials support
