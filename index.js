@@ -358,7 +358,7 @@ async function run() {
       }
     });
 
-    app.get("/product/wishlist/:userEmail", verifyFbToken, async (req, res) => {
+    app.get("/product/wishlist/:userEmail", async (req, res) => {
       const userEmail = req.params.userEmail;
       if (!userEmail) {
         return res.status(400).json({message: "Missing userEmail"});
@@ -368,6 +368,28 @@ async function run() {
         res.status(200).json(wishlistItems);
       } catch (error) {
         res.status(500).json({message: "Failed to fetch wishlist items"});
+      }
+    });
+
+    app.delete("/wishlist/:userEmail/:productId", async (req, res) => {
+      const {userEmail, productId} = req.params;
+
+      if (!userEmail || !productId) {
+        return res
+          .status(400)
+          .json({message: "Missing userEmail or productId"});
+      }
+
+      try {
+        const result = await productWishlist.deleteOne({userEmail, productId});
+
+        if (result.deletedCount === 0) {
+          return res.status(404).json({message: "Wishlist item not found"});
+        }
+
+        res.status(200).json({message: "Successfully removed from wishlist"});
+      } catch (error) {
+        res.status(500).json({message: "Failed to delete wishlist item"});
       }
     });
 
