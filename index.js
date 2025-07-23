@@ -202,90 +202,222 @@ async function run() {
       }
     });
 
-    app.get("/allProduct/approved", async (req, res) => {
-      try {
-        const {search, sort, from, to} = req.query;
+    // app.get("/allProduct/approved", async (req, res) => {
+    //   try {
+    //     const {search, sort, from, to} = req.query;
 
-        // Base filter: only approved products
-        const filter = {status: "approved"};
+    //     // Base filter: only approved products
+    //     const filter = {status: "approved"};
 
-        // Search filter
-        if (search) {
-          filter.$or = [
-            {name: {$regex: search, $options: "i"}},
-            {market: {$regex: search, $options: "i"}},
-          ];
-        }
+    //     // Search filter
+    //     if (search) {
+    //       filter.$or = [
+    //         {name: {$regex: search, $options: "i"}},
+    //         {market: {$regex: search, $options: "i"}},
+    //       ];
+    //     }
 
-        // Date range filter
+    //     // Date range filter
 
-        // Fetch filtered products
-        let results = await allProductCollection.find(filter).toArray();
+    //     // Fetch filtered products
+    //     let results = await allProductCollection.find(filter).toArray();
 
-        if (from || to) {
-          const fromDate = from ? new Date(from) : null;
+    //     if (from || to) {
+    //       const fromDate = from ? new Date(from) : null;
 
-          const toDate = to ? new Date(to) : null;
+    //       const toDate = to ? new Date(to) : null;
 
-          results = results.filter((item) => {
-            const itemDate = new Date(item.createdAt);
+    //       results = results.filter((item) => {
+    //         const itemDate = new Date(item.createdAt);
 
-            if (isNaN(itemDate)) return false;
+    //         if (isNaN(itemDate)) return false;
 
-            if (fromDate && itemDate < fromDate) return false;
+    //         if (fromDate && itemDate < fromDate) return false;
 
-            if (toDate && itemDate > toDate) return false;
+    //         if (toDate && itemDate > toDate) return false;
 
-            return true;
-          });
-        }
-        // Sort by price using latest price
-        if (sort) {
-          results.sort((a, b) => {
-            const getLatestPrice = (item) =>
-              item.price ??
-              (item.prices?.length
-                ? item.prices[item.prices.length - 1].price
-                : 0);
+    //         return true;
+    //       });
+    //     }
+    //     // Sort by price using latest price
+    //     if (sort) {
+    //       results.sort((a, b) => {
+    //         const getLatestPrice = (item) =>
+    //           item.price ??
+    //           (item.prices?.length
+    //             ? item.prices[item.prices.length - 1].price
+    //             : 0);
 
-            if (sort === "lowToHigh")
-              return getLatestPrice(a) - getLatestPrice(b);
-            if (sort === "highToLow")
-              return getLatestPrice(b) - getLatestPrice(a);
-            return 0;
-          });
-        }
+    //         if (sort === "lowToHigh")
+    //           return getLatestPrice(a) - getLatestPrice(b);
+    //         if (sort === "highToLow")
+    //           return getLatestPrice(b) - getLatestPrice(a);
+    //         return 0;
+    //       });
+    //     }
 
-        // Format for frontend
-        const formattedResults = results.map((product) => ({
-          _id: product._id.toString(),
-          image: product.image,
-          name: product.name,
-          price:
-            product.price ??
-            (product.prices?.length
-              ? product.prices[product.prices.length - 1].price
-              : null),
-          status: product.status,
-          prices: product.prices,
-          createdAt: product.createdAt,
-          market: product.market,
-          description: product.description,
-          role: product.role,
-          vendor: {
-            name: product.vendorName,
-            email: product.vendorEmail,
-            image: product.vendorImage,
-          },
-        }));
+    //     // Format for frontend
+    //     const formattedResults = results.map((product) => ({
+    //       _id: product._id.toString(),
+    //       image: product.image,
+    //       name: product.name,
+    //       price:
+    //         product.price ??
+    //         (product.prices?.length
+    //           ? product.prices[product.prices.length - 1].price
+    //           : null),
+    //       status: product.status,
+    //       prices: product.prices,
+    //       createdAt: product.createdAt,
+    //       market: product.market,
+    //       description: product.description,
+    //       role: product.role,
+    //       vendor: {
+    //         name: product.vendorName,
+    //         email: product.vendorEmail,
+    //         image: product.vendorImage,
+    //       },
+    //     }));
 
-        res.status(200).send(formattedResults);
-      } catch (err) {
-        console.error(err);
-        res.status(500).send({error: "Failed to fetch approved products"});
-      }
+    //     res.status(200).send(formattedResults);
+    //   } catch (err) {
+    //     console.error(err);
+    //     res.status(500).send({error: "Failed to fetch approved products"});
+    //   }
+    // });
+// app.get("/allProduct/approved", async (req, res) => {
+//   try {
+//     const { search, sort, from, to, page = 1, limit = 10 } = req.query; // default limit 10
+
+//     const filter = { status: "approved" };
+
+//     if (search) {
+//       filter.$or = [
+//         { name: { $regex: search, $options: "i" } },
+//         { market: { $regex: search, $options: "i" } },
+//       ];
+//     }
+
+//     let results = await allProductCollection.find(filter).toArray();
+
+//     if (from || to) {
+//       const fromDate = from ? new Date(from) : null;
+//       const toDate = to ? new Date(to) : null;
+
+//       results = results.filter((item) => {
+//         const itemDate = new Date(item.createdAt);
+//         if (isNaN(itemDate)) return false;
+//         if (fromDate && itemDate < fromDate) return false;
+//         if (toDate && itemDate > toDate) return false;
+//         return true;
+//       });
+//     }
+
+//     if (sort) {
+//       results.sort((a, b) => {
+//         const getLatestPrice = (item) =>
+//           item.price ??
+//           (item.prices?.length
+//             ? item.prices[item.prices.length - 1].price
+//             : 0);
+
+//         if (sort === "lowToHigh") return getLatestPrice(a) - getLatestPrice(b);
+//         if (sort === "highToLow") return getLatestPrice(b) - getLatestPrice(a);
+//         return 0;
+//       });
+//     }
+
+//     const formattedResults = results.map((product) => ({
+//       _id: product._id.toString(),
+//       image: product.image,
+//       name: product.name,
+//       price:
+//         product.price ??
+//         (product.prices?.length
+//           ? product.prices[product.prices.length - 1].price
+//           : null),
+//       status: product.status,
+//       prices: product.prices,
+//       createdAt: product.createdAt,
+//       market: product.market,
+//       description: product.description,
+//       role: product.role,
+//       vendor: {
+//         name: product.vendorName,
+//         email: product.vendorEmail,
+//         image: product.vendorImage,
+//       },
+//     }));
+
+//     // ✅ Pagination logic with limit = 10
+//     const pageNum = parseInt(page) || 1;
+//     const limitNum = parseInt(limit) || 10;
+//     const total = formattedResults.length;
+//     const totalPages = Math.ceil(total / limitNum);
+//     const start = (pageNum - 1) * limitNum;
+//     const paginatedResults = formattedResults.slice(start, start + limitNum);
+
+//     res.status(200).send({
+//       products: paginatedResults,
+//       totalPages,
+//       currentPage: pageNum,
+//       totalItems: total,
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).send({ error: "Failed to fetch approved products" });
+//   }
+// });
+
+app.get("/allProduct/approved", async (req, res) => {
+  try {
+    const { search, sort, from, to, page = 1, limit = 10 } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+
+    // 1. Build the complete filter query for the database
+    const filter = { status: "approved" };
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { market: { $regex: search, $options: "i" } },
+      ];
+    }
+    if (from && to) {
+      // Let MongoDB handle the date range filtering efficiently
+      filter.createdAt = { $gte: new Date(from), $lte: new Date(to) };
+    }
+
+    // 2. Get the total count of documents that match the filter
+    const total = await allProductCollection.countDocuments(filter);
+
+    // 3. Build the find query with sorting options
+    let sortOption = {};
+    if (sort === "lowToHigh") {
+      sortOption = { price: 1 }; // Sort by price ascending
+    } else if (sort === "highToLow") {
+      sortOption = { price: -1 }; // Sort by price descending
+    }
+
+    // 4. Fetch only the products for the current page from the database
+    const products = await allProductCollection
+      .find(filter)
+      .sort(sortOption)
+      .skip((pageNum - 1) * limitNum) // Skip documents for previous pages
+      .limit(limitNum) // Limit to the number of items per page
+      .toArray();
+
+    // 5. Send the paginated results and total count back
+    res.status(200).send({
+      products: products, // The 10 products for this page
+      total: total,       // The total number of products matching the query
     });
 
+  } catch (err) {
+    console.error("Error fetching approved products:", err);
+    res.status(500).send({ error: "Failed to fetch approved products" });
+  }
+});
     app.get("/allProduct/pending", verifyFbToken, async (req, res) => {
       try {
         const products = await allProductCollection
