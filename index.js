@@ -6,8 +6,8 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const {MongoClient, ServerApiVersion, ObjectId} = require("mongodb");
 const admin = require("firebase-admin");
 const path = require("path");
+const {log} = require("console");
 
-// 🔐 Firebase Admin Setup
 const serviceAccount = require(path.join(
   __dirname,
   "./firebaseServiceAccount.json"
@@ -16,7 +16,6 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
-// 🔗 Middleware
 const port = process.env.PORT || 4000;
 app.use(
   cors({
@@ -31,7 +30,6 @@ app.use(
 );
 app.use(express.json());
 
-// 🔗 MongoDB Setup
 const uri = process.env.MONGO_URI;
 const client = new MongoClient(uri, {
   serverApi: {
@@ -107,7 +105,7 @@ async function run() {
     const reviewsCollection = database.collection("review");
     const PaymentsCollection = database.collection("payment");
 
-    // ✅ Save User if Not Exists
+    // API to save a new user if they don't already exist
     app.post("/allUser", async (req, res) => {
       const {name, email, role} = req.body;
 
@@ -130,7 +128,7 @@ async function run() {
       }
     });
 
-    // 🔐 Get all users (protected)
+    // API to get all users
     app.get("/allUser", verifyFbToken, async (req, res) => {
       try {
         const users = await usersCollection.find().toArray();
@@ -140,7 +138,7 @@ async function run() {
       }
     });
 
-    // 🔐 Get all users with role = 'user' (protected)
+    // API to get all users with the role 'user'
     app.get(
       "/allUser/role/user",
       verifyAdmin,
@@ -155,7 +153,7 @@ async function run() {
       }
     );
 
-    // 🔐 Get all users with role = 'vendor' (protected)
+    // API to get all users with the role 'vendor'
     app.get(
       "/allUser/role/vendor",
       verifyAdmin,
@@ -172,27 +170,81 @@ async function run() {
       }
     );
 
-    // 🔐 Get user by email (protected)
-    app.get("/allUser/email", verifyFbToken, async (req, res) => {
-      const email = req.query.email;
+    // API to get a specific user by their email
+    // app.get("/allUser/email", verifyFbToken, async (req, res) => {
+    //   const email = req.query.email;
 
-      if (!email) {
-        return res.status(400).send({error: "Email query is required"});
-      }
+    //   if (!email) {
+    //     return res.status(400).send({error: "Email query is required"});
+    //   }
 
-      try {
-        const user = await usersCollection.findOne({email});
-        if (!user) {
-          return res.status(404).send({error: "User not found"});
-        }
-        res.send(user);
-      } catch (error) {
-        res.status(500).send({error: "Failed to fetch user by email"});
-      }
-    });
+    //   try {
+    //     const user = await usersCollection.findOne({email});
+    //     if (!user) {
+    //       return res.status(404).send({error: "User not found"});
+    //     }
+    //     res.send(user);
+    //   } catch (error) {
+    //     res.status(500).send({error: "Failed to fetch user by email"});
+    //   }
+    // });
 
-    // Product ??
 
+
+app.get("/allUser/email", verifyFbToken, async (req, res) => {
+  const email = req.query.email;
+
+  if (!email) {
+    return res.status(400).send({ error: "Email query is required" });
+  }
+
+  try {
+    // First, check if the user exists
+    const user = await usersCollection.findOne({ email });
+
+    if (!user) {
+      return res.status(404).send({ error: "User not found" });
+    }
+
+    // Update the user to add vendorRequest: true
+    await usersCollection.updateOne(
+      { email },
+      { $set: { vendorRequest: true } }
+    );
+
+    // Return the updated user
+    const updatedUser = await usersCollection.findOne({ email });
+    res.send(updatedUser);
+
+  } catch (error) {
+    console.error("Error updating user vendorRequest:", error);
+    res.status(500).send({ error: "Failed to update user" });
+  }
+});
+
+
+
+
+// PATCH /users/vendor-request?email=abc@gmail.com
+app.patch("/users/vendor-request", verifyFbToken, async (req, res) => {
+  const email = req.query.email;
+  const { vendorRequest } = req.body;
+
+  if (!email) {
+    return res.status(400).send({ error: "Email query is required" });
+  }
+
+  try {
+    const result = await usersCollection.updateOne(
+      { email },
+      { $set: { vendorRequest: vendorRequest === true } }
+    );
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ error: "Failed to update vendor request" });
+  }
+});
+    // API to get all products
     app.get("/allProduct", async (req, res) => {
       try {
         const products = await allProductCollection.find().toArray();
@@ -202,222 +254,68 @@ async function run() {
       }
     });
 
-    // app.get("/allProduct/approved", async (req, res) => {
-    //   try {
-    //     const {search, sort, from, to} = req.query;
+    // API to get approved products with filtering, sorting, and pagination
+    app.get("/allProduct/approved", async (req, res) => {
+      try {
+        const {search, sort, from, to, page = 1, limit = 10} = req.query;
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
 
-    //     // Base filter: only approved products
-    //     const filter = {status: "approved"};
+        const filter = {status: "approved"};
+        if (search) {
+          filter.$or = [
+            {name: {$regex: search, $options: "i"}},
+            {market: {$regex: search, $options: "i"}},
+          ];
+        }
 
-    //     // Search filter
-    //     if (search) {
-    //       filter.$or = [
-    //         {name: {$regex: search, $options: "i"}},
-    //         {market: {$regex: search, $options: "i"}},
-    //       ];
-    //     }
+        let allMatchingProducts = await allProductCollection
+          .find(filter)
+          .toArray();
 
-    //     // Date range filter
+        if (from || to) {
+          const fromDate = from ? new Date(from) : null;
+          const toDate = to ? new Date(to) : null;
+          if (toDate) {
+            toDate.setHours(23, 59, 59, 999);
+          }
 
-    //     // Fetch filtered products
-    //     let results = await allProductCollection.find(filter).toArray();
+          allMatchingProducts = allMatchingProducts.filter((item) => {
+            const itemDate = new Date(item.createdAt);
+            if (isNaN(itemDate)) return false;
+            if (fromDate && itemDate < fromDate) return false;
+            if (toDate && itemDate > toDate) return false;
+            return true;
+          });
+        }
 
-    //     if (from || to) {
-    //       const fromDate = from ? new Date(from) : null;
+        const total = allMatchingProducts.length;
 
-    //       const toDate = to ? new Date(to) : null;
+        if (sort) {
+          allMatchingProducts.sort((a, b) => {
+            if (sort === "lowToHigh") return a.price - b.price;
+            if (sort === "highToLow") return b.price - a.price;
+            return 0;
+          });
+        }
 
-    //       results = results.filter((item) => {
-    //         const itemDate = new Date(item.createdAt);
+        const start = (pageNum - 1) * limitNum;
+        const paginatedProducts = allMatchingProducts.slice(
+          start,
+          start + limitNum
+        );
 
-    //         if (isNaN(itemDate)) return false;
-
-    //         if (fromDate && itemDate < fromDate) return false;
-
-    //         if (toDate && itemDate > toDate) return false;
-
-    //         return true;
-    //       });
-    //     }
-    //     // Sort by price using latest price
-    //     if (sort) {
-    //       results.sort((a, b) => {
-    //         const getLatestPrice = (item) =>
-    //           item.price ??
-    //           (item.prices?.length
-    //             ? item.prices[item.prices.length - 1].price
-    //             : 0);
-
-    //         if (sort === "lowToHigh")
-    //           return getLatestPrice(a) - getLatestPrice(b);
-    //         if (sort === "highToLow")
-    //           return getLatestPrice(b) - getLatestPrice(a);
-    //         return 0;
-    //       });
-    //     }
-
-    //     // Format for frontend
-    //     const formattedResults = results.map((product) => ({
-    //       _id: product._id.toString(),
-    //       image: product.image,
-    //       name: product.name,
-    //       price:
-    //         product.price ??
-    //         (product.prices?.length
-    //           ? product.prices[product.prices.length - 1].price
-    //           : null),
-    //       status: product.status,
-    //       prices: product.prices,
-    //       createdAt: product.createdAt,
-    //       market: product.market,
-    //       description: product.description,
-    //       role: product.role,
-    //       vendor: {
-    //         name: product.vendorName,
-    //         email: product.vendorEmail,
-    //         image: product.vendorImage,
-    //       },
-    //     }));
-
-    //     res.status(200).send(formattedResults);
-    //   } catch (err) {
-    //     console.error(err);
-    //     res.status(500).send({error: "Failed to fetch approved products"});
-    //   }
-    // });
-// app.get("/allProduct/approved", async (req, res) => {
-//   try {
-//     const { search, sort, from, to, page = 1, limit = 10 } = req.query; // default limit 10
-
-//     const filter = { status: "approved" };
-
-//     if (search) {
-//       filter.$or = [
-//         { name: { $regex: search, $options: "i" } },
-//         { market: { $regex: search, $options: "i" } },
-//       ];
-//     }
-
-//     let results = await allProductCollection.find(filter).toArray();
-
-//     if (from || to) {
-//       const fromDate = from ? new Date(from) : null;
-//       const toDate = to ? new Date(to) : null;
-
-//       results = results.filter((item) => {
-//         const itemDate = new Date(item.createdAt);
-//         if (isNaN(itemDate)) return false;
-//         if (fromDate && itemDate < fromDate) return false;
-//         if (toDate && itemDate > toDate) return false;
-//         return true;
-//       });
-//     }
-
-//     if (sort) {
-//       results.sort((a, b) => {
-//         const getLatestPrice = (item) =>
-//           item.price ??
-//           (item.prices?.length
-//             ? item.prices[item.prices.length - 1].price
-//             : 0);
-
-//         if (sort === "lowToHigh") return getLatestPrice(a) - getLatestPrice(b);
-//         if (sort === "highToLow") return getLatestPrice(b) - getLatestPrice(a);
-//         return 0;
-//       });
-//     }
-
-//     const formattedResults = results.map((product) => ({
-//       _id: product._id.toString(),
-//       image: product.image,
-//       name: product.name,
-//       price:
-//         product.price ??
-//         (product.prices?.length
-//           ? product.prices[product.prices.length - 1].price
-//           : null),
-//       status: product.status,
-//       prices: product.prices,
-//       createdAt: product.createdAt,
-//       market: product.market,
-//       description: product.description,
-//       role: product.role,
-//       vendor: {
-//         name: product.vendorName,
-//         email: product.vendorEmail,
-//         image: product.vendorImage,
-//       },
-//     }));
-
-//     // ✅ Pagination logic with limit = 10
-//     const pageNum = parseInt(page) || 1;
-//     const limitNum = parseInt(limit) || 10;
-//     const total = formattedResults.length;
-//     const totalPages = Math.ceil(total / limitNum);
-//     const start = (pageNum - 1) * limitNum;
-//     const paginatedResults = formattedResults.slice(start, start + limitNum);
-
-//     res.status(200).send({
-//       products: paginatedResults,
-//       totalPages,
-//       currentPage: pageNum,
-//       totalItems: total,
-//     });
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).send({ error: "Failed to fetch approved products" });
-//   }
-// });
-
-app.get("/allProduct/approved", async (req, res) => {
-  try {
-    const { search, sort, from, to, page = 1, limit = 10 } = req.query;
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
-
-    // 1. Build the complete filter query for the database
-    const filter = { status: "approved" };
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { market: { $regex: search, $options: "i" } },
-      ];
-    }
-    if (from && to) {
-      // Let MongoDB handle the date range filtering efficiently
-      filter.createdAt = { $gte: new Date(from), $lte: new Date(to) };
-    }
-
-    // 2. Get the total count of documents that match the filter
-    const total = await allProductCollection.countDocuments(filter);
-
-    // 3. Build the find query with sorting options
-    let sortOption = {};
-    if (sort === "lowToHigh") {
-      sortOption = { price: 1 }; // Sort by price ascending
-    } else if (sort === "highToLow") {
-      sortOption = { price: -1 }; // Sort by price descending
-    }
-
-    // 4. Fetch only the products for the current page from the database
-    const products = await allProductCollection
-      .find(filter)
-      .sort(sortOption)
-      .skip((pageNum - 1) * limitNum) // Skip documents for previous pages
-      .limit(limitNum) // Limit to the number of items per page
-      .toArray();
-
-    // 5. Send the paginated results and total count back
-    res.status(200).send({
-      products: products, // The 10 products for this page
-      total: total,       // The total number of products matching the query
+        res.status(200).send({
+          products: paginatedProducts,
+          total: total,
+        });
+      } catch (err) {
+        console.error("Error fetching approved products:", err);
+        res.status(500).send({error: "Failed to fetch approved products"});
+      }
     });
 
-  } catch (err) {
-    console.error("Error fetching approved products:", err);
-    res.status(500).send({ error: "Failed to fetch approved products" });
-  }
-});
+    // API to get all products with a 'pending' status
     app.get("/allProduct/pending", verifyFbToken, async (req, res) => {
       try {
         const products = await allProductCollection
@@ -429,6 +327,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
+    // API to get all products listed by a specific email
     app.get("/allProduct/email", verifyFbToken, async (req, res) => {
       const email = req.query.email;
       if (!email) {
@@ -443,6 +342,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
+    // API to get a single approved product by its ID
     app.get("/allProduct/approved/:id", verifyFbToken, async (req, res) => {
       try {
         const id = req.params.id;
@@ -467,6 +367,33 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
+    // API to get 6 recent, unique products from different markets
+    app.get("/allProduct/sortedsix", async (req, res) => {
+      try {
+        const products = await allProductCollection
+          .aggregate([
+            {$match: {status: "approved"}},
+            {$sort: {createdAt: -1}},
+            {
+              $group: {
+                _id: "$market",
+                latestProduct: {$first: "$$ROOT"},
+              },
+            },
+            {$replaceRoot: {newRoot: "$latestProduct"}},
+            {$sort: {createdAt: -1}},
+            {$limit: 6},
+          ])
+          .toArray();
+
+        res.status(200).send({products});
+      } catch (err) {
+        console.error("Error fetching sorted six approved products:", err);
+        res.status(500).send({error: "Failed to fetch sorted six products"});
+      }
+    });
+
+    // API to add a product to a user's wishlist
     app.post("/product/wishlist", verifyFbToken, async (req, res) => {
       const {productId, userEmail} = req.body;
       if (!productId || !userEmail) {
@@ -490,6 +417,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
+    // API to get all wishlist items for a specific user
     app.get("/product/wishlist/:userEmail", async (req, res) => {
       const userEmail = req.params.userEmail;
       if (!userEmail) {
@@ -503,6 +431,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
+    // API to remove a product from a user's wishlist
     app.delete("/wishlist/:userEmail/:productId", async (req, res) => {
       const {userEmail, productId} = req.params;
 
@@ -525,7 +454,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
-    // 🔐 Protect with Firebase token verification
+    // API to post a new review for a product
     app.post("/reviews", verifyFbToken, async (req, res) => {
       const {productId, userName, userEmail, userImage, rating, comment} =
         req.body;
@@ -535,7 +464,6 @@ app.get("/allProduct/approved", async (req, res) => {
       }
 
       try {
-        // Only allow one review per product per user
         const existing = await reviewsCollection.findOne({
           productId,
           userEmail,
@@ -564,14 +492,39 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
-    // 📥 Get reviews for a product
+    // Get reviews by user email
+app.get("/reviews/user/:email", verifyFbToken, async (req, res) => {
+  try {
+    const email = req.params.email;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const userReviews = await reviewsCollection
+      .find({ userEmail: email })
+      .sort({ createdAt: -1 }) // optional: sort newest first
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      totalReviews: userReviews.length,
+      reviews: userReviews,
+    });
+  } catch (error) {
+    console.error("Error fetching user reviews:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch reviews" });
+  }
+});
+
+    // API to get all reviews for a specific product
     app.get("/reviews/:productId", verifyFbToken, async (req, res) => {
       const {productId} = req.params;
 
       try {
         const reviews = await reviewsCollection
           .find({productId})
-          .sort({createdAt: -1}) // optional: newest first
+          .sort({createdAt: -1})
           .toArray();
         res.status(200).json(reviews);
       } catch (err) {
@@ -580,7 +533,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
-    // ✏️ Update a review (only if same user)
+    // API to update an existing review
     app.put("/reviews/:id", verifyFbToken, async (req, res) => {
       const reviewId = req.params.id;
       const {rating, comment} = req.body;
@@ -622,7 +575,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
-    // ❌ Delete review (only by same user)
+    // API to delete a review
     app.delete("/reviews/:id", verifyFbToken, async (req, res) => {
       const reviewId = req.params.id;
 
@@ -653,7 +606,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
-    // ✅ Stripe Payment
+    // API to create a Stripe payment intent
     app.post("/create-payment-intent", verifyFbToken, async (req, res) => {
       try {
         const {price} = req.body;
@@ -674,14 +627,11 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
+    // API to save payment information to the database
     app.post("/payments", verifyFbToken, async (req, res) => {
       try {
         const paymentInfo = req.body;
-
-        console.log("🧾 Incoming payment data:", paymentInfo);
-
         if (!paymentInfo.transactionId || !paymentInfo.email) {
-          console.log("❌ Missing required fields");
           return res.status(400).send({
             success: false,
             message: "Missing required payment fields",
@@ -693,15 +643,12 @@ app.get("/allProduct/approved", async (req, res) => {
           createdAt: new Date(),
         });
 
-        console.log("✅ Payment saved with ID:", result.insertedId);
-
         res.send({
           success: true,
           message: "Payment recorded",
           id: result.insertedId,
         });
       } catch (error) {
-        console.error("🔥 Payment save error:", error);
         res.status(500).send({
           success: false,
           message: "Failed to save payment info",
@@ -710,6 +657,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
+    // API to get all payments for a specific user
     app.get("/payments/user/:email", verifyFbToken, async (req, res) => {
       try {
         const email = req.params.email;
@@ -733,6 +681,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
+    // API to get all payments for a specific product
     app.get("/payments/product/:productId", verifyFbToken, async (req, res) => {
       try {
         const productId = req.params.productId;
@@ -756,6 +705,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
+    // API to get all payments for a specific vendor
     app.get("/payments/vendor/:email", verifyFbToken, async (req, res) => {
       try {
         const vendorEmail = req.params.email;
@@ -779,6 +729,7 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     });
 
+    // API to get payments for a specific product from a specific vendor
     app.get(
       "/payments/vendor/:email/product/:productId",
       verifyFbToken,
@@ -811,12 +762,11 @@ app.get("/allProduct/approved", async (req, res) => {
       }
     );
 
-    // ✅ Health Check Route
+    // API for server health check
     app.get("/", (req, res) => {
       res.send("✅ Backend is running");
     });
 
-    // ✅ Start Server
     app.listen(port, () => {
       console.log(`🚀 Server is running on port ${port}`);
     });
