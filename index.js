@@ -6,7 +6,6 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const {MongoClient, ServerApiVersion, ObjectId} = require("mongodb");
 const admin = require("firebase-admin");
 const path = require("path");
-const {log} = require("console");
 
 const serviceAccount = require(path.join(
   __dirname,
@@ -104,7 +103,7 @@ async function run() {
     const productWishlist = database.collection("productWishlist");
     const reviewsCollection = database.collection("review");
     const PaymentsCollection = database.collection("payment");
-
+    const AdvertisementCollection = database.collection("advertisement");
     // API to save a new user if they don't already exist
     app.post("/allUser", async (req, res) => {
       const {name, email, role} = req.body;
@@ -170,6 +169,22 @@ async function run() {
       }
     );
 
+    app.get("/users/role/:email", verifyFbToken, async (req, res) => {
+      try {
+        const email = req.params.email;
+
+        const user = await usersCollection.findOne({email});
+
+        if (!user) {
+          return res.status(404).send({error: "User not found"});
+        }
+
+        res.send({role: user.role || "user"}); // default to "user" if role not set
+      } catch (error) {
+        res.status(500).send({error: "Failed to fetch user role"});
+      }
+    });
+
     // API to get a specific user by their email
     // app.get("/allUser/email", verifyFbToken, async (req, res) => {
     //   const email = req.query.email;
@@ -189,61 +204,63 @@ async function run() {
     //   }
     // });
 
+    app.get("/allUser/email", verifyFbToken, async (req, res) => {
+      const email = req.query.email;
 
+      if (!email) {
+        return res.status(400).send({error: "Email query is required"});
+      }
 
-app.get("/allUser/email", verifyFbToken, async (req, res) => {
-  const email = req.query.email;
+      try {
+        // First, check if the user exists
+        const user = await usersCollection.findOne({email});
 
-  if (!email) {
-    return res.status(400).send({ error: "Email query is required" });
-  }
+        if (!user) {
+          return res.status(404).send({error: "User not found"});
+        }
 
-  try {
-    // First, check if the user exists
-    const user = await usersCollection.findOne({ email });
+        // Update the user to add vendorRequest: true
+        await usersCollection.updateOne({email}, {$set: {vendorRequest: true}});
 
-    if (!user) {
-      return res.status(404).send({ error: "User not found" });
-    }
+        // Return the updated user
+        const updatedUser = await usersCollection.findOne({email});
+        res.send(updatedUser);
+      } catch (error) {
+        console.error("Error updating user vendorRequest:", error);
+        res.status(500).send({error: "Failed to update user"});
+      }
+    });
 
-    // Update the user to add vendorRequest: true
-    await usersCollection.updateOne(
-      { email },
-      { $set: { vendorRequest: true } }
-    );
+    // PATCH /users/vendor-request?email=abc@gmail.com
+    app.patch("/users/vendor-request", verifyFbToken, async (req, res) => {
+      const email = req.query.email;
+      const {vendorRequest} = req.body;
 
-    // Return the updated user
-    const updatedUser = await usersCollection.findOne({ email });
-    res.send(updatedUser);
+      if (!email) {
+        return res.status(400).send({error: "Email query is required"});
+      }
 
-  } catch (error) {
-    console.error("Error updating user vendorRequest:", error);
-    res.status(500).send({ error: "Failed to update user" });
-  }
-});
+      try {
+        const result = await usersCollection.updateOne(
+          {email},
+          {$set: {vendorRequest: vendorRequest === true}}
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({error: "Failed to update vendor request"});
+      }
+    });
 
+    app.post("/allProduct", verifyFbToken, async (req, res) => {
+      try {
+        const product = req.body;
+        const result = await allProductCollection.insertOne(product);
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({error: "Failed to add product"});
+      }
+    });
 
-
-
-// PATCH /users/vendor-request?email=abc@gmail.com
-app.patch("/users/vendor-request", verifyFbToken, async (req, res) => {
-  const email = req.query.email;
-  const { vendorRequest } = req.body;
-
-  if (!email) {
-    return res.status(400).send({ error: "Email query is required" });
-  }
-
-  try {
-    const result = await usersCollection.updateOne(
-      { email },
-      { $set: { vendorRequest: vendorRequest === true } }
-    );
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ error: "Failed to update vendor request" });
-  }
-});
     // API to get all products
     app.get("/allProduct", async (req, res) => {
       try {
@@ -335,10 +352,145 @@ app.patch("/users/vendor-request", verifyFbToken, async (req, res) => {
       }
 
       try {
-        const products = await allProductCollection.find({email}).toArray();
+        const products = await allProductCollection
+          .find({vendorEmail: email})
+          .toArray();
         res.send(products);
       } catch (err) {
         res.status(500).send({error: "Failed to fetch products by email"});
+      }
+    });
+
+    // app.put("/allProduct/:id", verifyFbToken, async (req, res) => {
+    //   const id = req.params.id;
+    //   const updatedData = req.body;
+
+    //   try {
+    //     const result = await allProductCollection.updateOne(
+    //       { _id: new ObjectId(id) },
+    //       { $set: updatedData }
+    //     );
+
+    //     res.send(result);
+    //   } catch (err) {
+    //     console.error("Error updating product:", err);
+    //     res.status(500).send({ error: "Failed to update product" });
+    //   }
+    // });
+
+    app.put("/allProduct/:id", verifyFbToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const updatedData = req.body;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({error: "Invalid product ID"});
+        }
+
+        const product = await allProductCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!product) {
+          return res.status(404).send({error: "Product not found"});
+        }
+
+        // If price is being changed, store the old price in 'prices' array
+        const priceUpdates = {};
+        if (updatedData.price && updatedData.price !== product.price) {
+          priceUpdates.$push = {
+            prices: {
+              price: product.price,
+              date: new Date(),
+            },
+          };
+        }
+
+        const updateFields = {
+          $set: {
+            ...updatedData,
+            updatedAt: new Date(),
+          },
+          ...(priceUpdates.$push ? {} : {$push: {}}), // placeholder if no push needed
+        };
+
+        const finalUpdate = priceUpdates.$push
+          ? {...updateFields, $push: priceUpdates.$push}
+          : updateFields;
+
+        const result = await allProductCollection.updateOne(
+          {_id: new ObjectId(id)},
+          finalUpdate
+        );
+
+        res.send({
+          message: "Product updated successfully",
+          modifiedCount: result.modifiedCount,
+        });
+      } catch (error) {
+        console.error("Error updating product:", error);
+        res.status(500).send({error: "Failed to update product"});
+      }
+    });
+
+    app.patch("/allProduct/:id", verifyFbToken, async (req, res) => {
+      const id = req.params.id;
+      const updateData = req.body;
+
+      try {
+        const result = await allProductCollection.updateOne(
+          {_id: new ObjectId(id)},
+          {$set: updateData}
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({error: "Product not found"});
+        }
+
+        res.send({message: "Product updated successfully", result});
+      } catch (err) {
+        res.status(500).send({error: "Failed to update product"});
+      }
+    });
+
+    app.delete("/allProduct/:id", verifyFbToken, async (req, res) => {
+      const id = req.params.id;
+
+      try {
+        const result = await allProductCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).send({error: "Product not found"});
+        }
+
+        res.send({message: "Product deleted successfully", result});
+      } catch (err) {
+        res.status(500).send({error: "Failed to delete product"});
+      }
+    });
+
+    app.get("/allProduct/:id", verifyFbToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({error: "Invalid product ID"});
+        }
+
+        const product = await allProductCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!product) {
+          return res.status(404).send({error: "Product not found"});
+        }
+
+        res.status(200).send(product);
+      } catch (err) {
+        console.error("Error fetching product by ID:", err);
+        res.status(500).send({error: "Failed to fetch product"});
       }
     });
 
@@ -493,29 +645,31 @@ app.patch("/users/vendor-request", verifyFbToken, async (req, res) => {
     });
 
     // Get reviews by user email
-app.get("/reviews/user/:email", verifyFbToken, async (req, res) => {
-  try {
-    const email = req.params.email;
+    app.get("/reviews/user/:email", verifyFbToken, async (req, res) => {
+      try {
+        const email = req.params.email;
 
-    if (!email) {
-      return res.status(400).json({ message: "Email is required" });
-    }
+        if (!email) {
+          return res.status(400).json({message: "Email is required"});
+        }
 
-    const userReviews = await reviewsCollection
-      .find({ userEmail: email })
-      .sort({ createdAt: -1 }) // optional: sort newest first
-      .toArray();
+        const userReviews = await reviewsCollection
+          .find({userEmail: email})
+          .sort({createdAt: -1}) // optional: sort newest first
+          .toArray();
 
-    res.status(200).json({
-      success: true,
-      totalReviews: userReviews.length,
-      reviews: userReviews,
+        res.status(200).json({
+          success: true,
+          totalReviews: userReviews.length,
+          reviews: userReviews,
+        });
+      } catch (error) {
+        console.error("Error fetching user reviews:", error);
+        res
+          .status(500)
+          .json({success: false, message: "Failed to fetch reviews"});
+      }
     });
-  } catch (error) {
-    console.error("Error fetching user reviews:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch reviews" });
-  }
-});
 
     // API to get all reviews for a specific product
     app.get("/reviews/:productId", verifyFbToken, async (req, res) => {
@@ -761,6 +915,90 @@ app.get("/reviews/user/:email", verifyFbToken, async (req, res) => {
         }
       }
     );
+
+    app.get("/advertisements", verifyFbToken, async (req, res) => {
+      const vendorEmail = req.query.vendorEmail;
+      if (!vendorEmail)
+        return res.status(400).json({error: "Missing vendorEmail"});
+
+      try {
+        const ads = await AdvertisementCollection.find({vendorEmail}).toArray();
+        res.send(ads);
+      } catch (error) {
+        res.status(500).json({error: "Failed to fetch advertisements"});
+      }
+    });
+
+    // ✅ POST a new advertisement
+    app.post("/advertisements", verifyFbToken, async (req, res) => {
+      const ad = req.body;
+
+      if (!ad.title || !ad.description || !ad.vendorEmail) {
+        return res.status(400).json({error: "Missing required fields"});
+      }
+
+      ad.status = "pending";
+      ad.createdAt = new Date();
+
+      try {
+        const result = await AdvertisementCollection.insertOne(ad);
+        res.status(201).json({
+          message: "Advertisement added",
+          insertedId: result.insertedId,
+        });
+      } catch (error) {
+        res.status(500).json({error: "Failed to add advertisement"});
+      }
+    });
+
+    // ✅ PUT update advertisement by ID
+    app.put("/advertisements/:id", verifyFbToken, async (req, res) => {
+      const id = req.params.id;
+      const updated = req.body;
+
+      try {
+        const result = await AdvertisementCollection.updateOne(
+          {_id: new ObjectId(id)},
+          {
+            $set: {
+              title: updated.title,
+              description: updated.description,
+              image: updated.image,
+
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res
+            .status(404)
+            .json({error: "Advertisement not found or no changes made"});
+        }
+
+        res.json({message: "Advertisement updated"});
+      } catch (error) {
+        res.status(500).json({error: "Failed to update advertisement"});
+      }
+    });
+
+    // ✅ DELETE advertisement by ID
+    app.delete("/advertisements/:id", verifyFbToken, async (req, res) => {
+      const id = req.params.id;
+
+      try {
+        const result = await AdvertisementCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        if (result.deletedCount === 0) {
+          return res.status(404).json({error: "Advertisement not found"});
+        }
+
+        res.json({message: "Advertisement deleted"});
+      } catch (error) {
+        res.status(500).json({error: "Failed to delete advertisement"});
+      }
+    });
 
     // API for server health check
     app.get("/", (req, res) => {
