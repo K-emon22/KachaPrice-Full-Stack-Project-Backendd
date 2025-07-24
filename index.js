@@ -169,7 +169,7 @@ async function run() {
       }
     );
 
-    app.get("/users/role/:email", verifyFbToken, async (req, res) => {
+    app.get("/users/role/:email", async (req, res) => {
       try {
         const email = req.params.email;
 
@@ -251,6 +251,12 @@ async function run() {
       }
     });
 
+app.get("/getRole/:email", async (req, res) => {
+  const email = req.params.email;
+  const user = await usersCollection.findOne({ email });
+  res.send({ role: user?.role || "user" });
+});
+
     app.post("/allProduct", verifyFbToken, async (req, res) => {
       try {
         const product = req.body;
@@ -268,6 +274,33 @@ async function run() {
         res.send(products);
       } catch (err) {
         res.status(500).send({error: "Failed to fetch products"});
+      }
+    });
+
+
+ // API to get 6 recent, unique products from different markets
+    app.get("/allProduct/sortedsix", async (req, res) => {
+      try {
+        const products = await allProductCollection
+          .aggregate([
+            {$match: {status: "approved"}},
+            {$sort: {createdAt: -1}},
+            {
+              $group: {
+                _id: "$market",
+                latestProduct: {$first: "$$ROOT"},
+              },
+            },
+            {$replaceRoot: {newRoot: "$latestProduct"}},
+            {$sort: {createdAt: -1}},
+            {$limit: 6},
+          ])
+          .toArray();
+
+        res.status(200).send({products});
+      } catch (err) {
+        console.error("Error fetching sorted six approved products:", err);
+        res.status(500).send({error: "Failed to fetch sorted six products"});
       }
     });
 
@@ -519,31 +552,7 @@ async function run() {
       }
     });
 
-    // API to get 6 recent, unique products from different markets
-    app.get("/allProduct/sortedsix", async (req, res) => {
-      try {
-        const products = await allProductCollection
-          .aggregate([
-            {$match: {status: "approved"}},
-            {$sort: {createdAt: -1}},
-            {
-              $group: {
-                _id: "$market",
-                latestProduct: {$first: "$$ROOT"},
-              },
-            },
-            {$replaceRoot: {newRoot: "$latestProduct"}},
-            {$sort: {createdAt: -1}},
-            {$limit: 6},
-          ])
-          .toArray();
-
-        res.status(200).send({products});
-      } catch (err) {
-        console.error("Error fetching sorted six approved products:", err);
-        res.status(500).send({error: "Failed to fetch sorted six products"});
-      }
-    });
+   
 
     // API to add a product to a user's wishlist
     app.post("/product/wishlist", verifyFbToken, async (req, res) => {
