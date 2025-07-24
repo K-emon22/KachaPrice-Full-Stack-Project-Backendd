@@ -950,7 +950,7 @@ async function run() {
         res.status(500).json({error: "Failed to add advertisement"});
       }
     });
-
+  
     // ✅ PUT update advertisement by ID
     app.put("/advertisements/:id", verifyFbToken, async (req, res) => {
       const id = req.params.id;
