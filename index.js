@@ -945,7 +945,7 @@ async function run() {
         res.status(201).json({
           message: "Advertisement added",
           insertedId: result.insertedId,
-        });
+        }); 
       } catch (error) {
         res.status(500).json({error: "Failed to add advertisement"});
       }
