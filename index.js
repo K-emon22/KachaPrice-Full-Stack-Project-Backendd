@@ -22,8 +22,9 @@ app.use(
       "http://localhost:5173",
       "http://localhost:5174",
       "http://localhost:5175",
+      "https://kachaprice.netlify.app",
     ],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
@@ -232,6 +233,26 @@ async function run() {
     });
 
     // PATCH /users/vendor-request?email=abc@gmail.com
+    // app.patch("/users/vendor-request", verifyFbToken, async (req, res) => {
+    //   const email = req.query.email;
+    //   const {vendorRequest} = req.body;
+
+    //   if (!email) {
+    //     return res.status(400).send({error: "Email query is required"});
+    //   }
+
+    //   try {
+    //     const result = await usersCollection.updateOne(
+    //       {email},
+    //       {$set: {vendorRequest: vendorRequest === true}}
+    //     );
+    //     res.send(result);
+    //   } catch (error) {
+    //     res.status(500).send({error: "Failed to update vendor request"});
+    //   }
+    // });
+
+    // PATCH - Request to become a vendor
     app.patch("/users/vendor-request", verifyFbToken, async (req, res) => {
       const email = req.query.email;
       const {vendorRequest} = req.body;
@@ -241,21 +262,55 @@ async function run() {
       }
 
       try {
+        const user = await usersCollection.findOne({email});
+
+        if (!user) {
+          return res.status(404).send({error: "User not found"});
+        }
+
+        if (user.vendorRequest === true) {
+          return res
+            .status(400)
+            .send({error: "Vendor request already submitted"});
+        }
+
         const result = await usersCollection.updateOne(
           {email},
           {$set: {vendorRequest: vendorRequest === true}}
         );
+
         res.send(result);
       } catch (error) {
         res.status(500).send({error: "Failed to update vendor request"});
       }
     });
 
-app.get("/getRole/:email", async (req, res) => {
-  const email = req.params.email;
-  const user = await usersCollection.findOne({ email });
-  res.send({ role: user?.role || "user" });
-});
+    // GET - Check if user already requested vendor
+    app.get("/user/vendor-request", verifyFbToken, async (req, res) => {
+      const email = req.query.email;
+
+      if (!email) {
+        return res.status(400).send({error: "Email is required"});
+      }
+
+      try {
+        const user = await usersCollection.findOne({email});
+
+        if (!user) {
+          return res.status(404).send({error: "User not found"});
+        }
+
+        res.send({vendorRequest: user.vendorRequest === true});
+      } catch (error) {
+        res.status(500).send({error: "Failed to check vendor request"});
+      }
+    });
+
+    app.get("/getRole/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await usersCollection.findOne({email});
+      res.send({role: user?.role || "user"});
+    });
 
     app.post("/allProduct", verifyFbToken, async (req, res) => {
       try {
@@ -277,8 +332,7 @@ app.get("/getRole/:email", async (req, res) => {
       }
     });
 
-
- // API to get 6 recent, unique products from different markets
+    // API to get 6 recent, unique products from different markets
     app.get("/allProduct/sortedsix", async (req, res) => {
       try {
         const products = await allProductCollection
@@ -551,8 +605,6 @@ app.get("/getRole/:email", async (req, res) => {
         res.status(500).send({error: "Failed to fetch approved product"});
       }
     });
-
-   
 
     // API to add a product to a user's wishlist
     app.post("/product/wishlist", verifyFbToken, async (req, res) => {
@@ -954,12 +1006,25 @@ app.get("/getRole/:email", async (req, res) => {
         res.status(201).json({
           message: "Advertisement added",
           insertedId: result.insertedId,
-        }); 
+        });
       } catch (error) {
         res.status(500).json({error: "Failed to add advertisement"});
       }
     });
-  
+
+    app.get("/alladvertisements", async (req, res) => {
+      try {
+        const approvedAds = await AdvertisementCollection.find({
+          status: "approved",
+        }).toArray();
+        res.status(200).json(approvedAds);
+      } catch (error) {
+        res
+          .status(500)
+          .json({error: "Failed to fetch approved advertisements"});
+      }
+    });
+
     // ✅ PUT update advertisement by ID
     app.put("/advertisements/:id", verifyFbToken, async (req, res) => {
       const id = req.params.id;
