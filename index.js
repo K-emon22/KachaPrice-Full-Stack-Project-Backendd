@@ -129,14 +129,16 @@ async function run() {
     });
 
     // API to get all users
-    app.get("/allUser", verifyFbToken, async (req, res) => {
-      try {
-        const users = await usersCollection.find().toArray();
-        res.send(users);
-      } catch (error) {
-        res.status(500).send({error: "Failed to fetch users"});
-      }
-    });
+   // Get all users — admin protected
+app.get("/allUser", verifyFbToken, async (req, res) => {
+  try {
+    const users = await usersCollection.find().toArray();
+    res.send(users);
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).send({ error: "Failed to fetch users" });
+  }
+});
 
     // API to get all users with the role 'user'
     app.get(
@@ -232,6 +234,87 @@ async function run() {
       }
     });
 
+
+
+
+
+
+// app.put("/user/admin/:id", verifyFbToken, async (req, res) => {
+//   const { id } = req.params;
+
+//   try {
+//     const result = await usersCollection.updateOne(
+//       { _id: new ObjectId(id) },
+//       {
+//         $set: { role: "admin" },
+//         $unset: { vendorRequest: "" }, // remove vendorRequest if exists
+//       }
+//     );
+
+//     if (result.modifiedCount > 0) {
+//       res.send({ success: true });
+//     } else {
+//       res.send({ success: false, message: "No user updated" });
+//     }
+//   } catch (error) {
+//     console.error("Make admin failed:", error);
+//     res.status(500).send({ success: false, error: "Failed to update user role" });
+//   }
+// });
+
+
+
+// Add this inside your async function run() { ... }
+
+// app.put("/user/admin/:id", verifyFbToken, verifyAdmin, async (req, res) => {
+//   const { id } = req.params;
+
+//   if (!ObjectId.isValid(id)) {
+//     return res.status(400).send({ success: false, message: "Invalid user ID" });
+//   }
+
+//   try {
+//     const result = await usersCollection.updateOne(
+//       { _id: new ObjectId(id) },
+//       { $set: { role: "admin" } }
+//     );
+
+//     if (result.matchedCount === 0) {
+//       return res.status(404).send({ success: false, message: "User not found" });
+//     }
+
+//     res.send({ success: true, message: "User role updated to admin" });
+//   } catch (error) {
+//     console.error("Error updating user to admin:", error);
+//     res.status(500).send({ success: false, message: "Failed to update user role" });
+//   }
+// });
+
+app.put("/user/admin/:id", verifyFbToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await usersCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: { role: "admin" },
+        $unset: { vendorRequest: "" },
+      }
+    );
+    if (result.modifiedCount > 0) {
+      res.send({ success: true, message: "User promoted to admin" });
+    } else {
+      res.status(404).send({ success: false, message: "User not found or already admin" });
+    }
+  } catch (error) {
+    res.status(500).send({ success: false, error: "Failed to update user role" });
+  }
+});
+
+
+
+
+
+
     // PATCH /users/vendor-request?email=abc@gmail.com
     // app.patch("/users/vendor-request", verifyFbToken, async (req, res) => {
     //   const email = req.query.email;
@@ -253,6 +336,29 @@ async function run() {
     // });
 
     // PATCH - Request to become a vendor
+
+
+
+app.put("/user/vendor/:id", verifyFbToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await usersCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: { role: "vendor", vendorRequest: false },
+      }
+    );
+    if (result.modifiedCount > 0) {
+      res.send({ success: true, message: "User promoted to vendor" });
+    } else {
+      res.status(404).send({ success: false, message: "User not found or already vendor" });
+    }
+  } catch (error) {
+    res.status(500).send({ success: false, error: "Failed to update user role" });
+  }
+});
+
+
     app.patch("/users/vendor-request", verifyFbToken, async (req, res) => {
       const email = req.query.email;
       const {vendorRequest} = req.body;
@@ -323,14 +429,44 @@ async function run() {
     });
 
     // API to get all products
-    app.get("/allProduct", async (req, res) => {
-      try {
-        const products = await allProductCollection.find().toArray();
-        res.send(products);
-      } catch (err) {
-        res.status(500).send({error: "Failed to fetch products"});
-      }
+    // app.get("/allProduct", async (req, res) => {
+    //   try {
+    //     const products = await allProductCollection.find().toArray();
+    //     res.send(products);
+    //   } catch (err) {
+    //     res.status(500).send({error: "Failed to fetch products"});
+    //   }
+    // });
+
+
+
+
+// API to get all products with pagination
+app.get("/allProduct", verifyFbToken, async (req, res) => {
+  try {
+    // Get page and limit from query params, with default values
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10; // Default to 10 items per page
+    const skip = (page - 1) * limit;
+
+    // Get the total count of all products for pagination
+    const totalProducts = await allProductCollection.countDocuments();
+
+    // Fetch only the products for the current page
+    const products = await allProductCollection.find().skip(skip).limit(limit).toArray();
+
+    // Send back the paginated data and the total count
+    res.send({
+      products,
+      total: totalProducts,
     });
+  } catch (err) {
+    console.error("Error fetching products:", err);
+    res.status(500).send({ error: "Failed to fetch products" });
+  }
+});
+
+
 
     // API to get 6 recent, unique products from different markets
     app.get("/allProduct/sortedsix", async (req, res) => {
