@@ -441,6 +441,13 @@ app.put("/user/vendor/:id", verifyFbToken, async (req, res) => {
 
 
 
+
+
+
+ 
+
+
+
 // API to get all products with pagination
 app.get("/allProduct", verifyFbToken, async (req, res) => {
   try {
