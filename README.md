@@ -1,4 +1,4 @@
-# KachaDam - Backend Server
+# KachaPrice - Backend Server
 
 This repository contains the backend server code for the **KachaDam** application. It is a Node.js and Express.js API that handles user authentication, role-based access control, product data management, vendor submissions, and payment processing.
 
