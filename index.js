@@ -130,15 +130,47 @@ async function run() {
 
     // API to get all users
     // Get all users — admin protected
-    app.get("/allUser", verifyFbToken, async (req, res) => {
-      try {
-        const users = await usersCollection.find().toArray();
-        res.send(users);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-        res.status(500).send({error: "Failed to fetch users"});
-      }
-    });
+    // app.get("/allUser", verifyFbToken, async (req, res) => {
+    //   try {
+    //     const users = await usersCollection.find().toArray();
+    //     res.send(users);
+    //   } catch (error) {
+    //     console.error("Error fetching users:", error);
+    //     res.status(500).send({error: "Failed to fetch users"});
+    //   }
+    // });
+
+
+// API to get all users with optional search (admin protected)
+app.get("/allUser", verifyFbToken, async (req, res) => {
+  try {
+    const search = req.query.search || "";
+    const query = {
+      $or: [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+      ],
+    };
+
+    const users = await usersCollection.find(query).toArray();
+    res.send(users);
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).send({ error: "Failed to fetch users" });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
 
     // API to get all users with the role 'user'
     app.get(
