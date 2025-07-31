@@ -10,7 +10,7 @@ const path = require("path");
 const serviceAccount = require(path.join(
   __dirname,
   "./firebaseServiceAccount.json"
-));
+));      
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -1238,3 +1238,4 @@ async function run() {
 }
 
 run().catch(console.dir);
+        
