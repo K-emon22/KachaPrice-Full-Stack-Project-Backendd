@@ -3,7 +3,7 @@
 
 This repository contains the backend server code for the **KachaDam** application. It is a Node.js and Express.js API that handles user authentication, role-based access control, product data management, vendor submissions, and payment processing.
 
-**Frontend Repo:** [Frontend repo](https://github.com/Programming-Hero-Web-Course4/b11a12-client-side-K-emon22)
+**Frontend Repo:** [Frontend repo](https://github.com/K-emon22/KachaPrice-Full-Stack-Project.git)
 
 ---
 
